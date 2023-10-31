@@ -1,0 +1,96 @@
+-- Average film length of each category
+	SELECT c.name AS 'Name', AVG(f.length) AS 'Avg_Length'
+	FROM film f
+	INNER JOIN film_category fc ON f.film_id=fc.film_id
+	INNER JOIN category c ON fc.category_id=c.category_id
+	GROUP BY c.name
+	ORDER BY c.name;
+
+-- Categories with the longest and shortest average film lengths
+	-- get list of all categories and their average film lengths
+	CREATE VIEW category_len AS
+		SELECT c.name AS 'Name', AVG(f.length) AS 'Avg_Length'
+		FROM film f
+		INNER JOIN film_category fc ON f.film_id=fc.film_id
+		INNER JOIN category c ON fc.category_id=c.category_id
+		GROUP BY c.name;
+	-- find the category with largest average
+	SELECT cl.Name, cl.Avg_Length
+	FROM category_len cl
+	WHERE cl.Avg_Length >= all
+		(SELECT cl.Avg_Length
+		FROM category_len cl)
+	UNION
+    -- union with the category with smallest average
+	SELECT cl.Name, cl.Avg_Length
+	FROM category_len cl
+	WHERE cl.Avg_Length <= all
+		(SELECT cl.Avg_Length
+		FROM category_len cl);
+        
+-- Customers who rented action but not comedy or classic movies
+    SELECT DISTINCT c.first_name AS 'First', c.last_name AS 'Last'
+    FROM customer c
+    INNER JOIN rental r ON c.customer_id=r.customer_id
+    INNER JOIN inventory i ON r.inventory_id=i.inventory_id
+    INNER JOIN film f ON i.film_id=f.film_id
+    INNER JOIN film_category fc ON f.film_id=fc.film_id
+	INNER JOIN category ca ON fc.category_id=ca.category_id
+    WHERE ca.name='Action'
+		-- exclude customers who have rented comedy and classics
+		AND c.customer_id NOT IN
+			(SELECT c.customer_id
+			FROM customer c
+			INNER JOIN rental r ON c.customer_id=r.customer_id
+			INNER JOIN inventory i ON r.inventory_id=i.inventory_id
+			INNER JOIN film f ON i.film_id=f.film_id
+			INNER JOIN film_category fc ON f.film_id=fc.film_id
+			INNER JOIN category ca ON fc.category_id=ca.category_id
+            WHERE ca.name='Comedy'
+				OR ca.name='Classics');
+    
+-- The actor appearing in the most English movies
+	SELECT e.First, e.Last
+    FROM
+		-- create table with the list of actors with their number of english movies
+		(SELECT a.first_name AS 'First', a.last_name AS 'Last', COUNT(f.film_id) AS 'Films'
+		FROM actor a
+		INNER JOIN film_actor fa ON a.actor_id=fa.actor_id
+		INNER JOIN film f ON fa.film_id=f.film_id
+		INNER JOIN language l ON f.language_id=l.language_id
+		WHERE l.name='English'
+		GROUP BY a.actor_id) e
+	-- find actor with highest number of english movies
+	WHERE e.Films >= all
+		(SELECT COUNT(f.film_id) AS 'Films'
+		FROM actor a
+		INNER JOIN film_actor fa ON a.actor_id=fa.actor_id
+		INNER JOIN film f ON fa.film_id=f.film_id
+		INNER JOIN language l ON f.language_id=l.language_id
+		WHERE l.name='English'
+		GROUP BY a.actor_id);
+	
+-- The number of movies rented for 10 days from Mike's store
+	SELECT COUNT(DISTINCT  i.film_id) AS 'Total'
+    FROM inventory i
+    INNER JOIN rental r ON i.inventory_id=r.inventory_id
+    INNER JOIN staff s ON r.staff_id=s.staff_id
+    WHERE s.first_name='Mike'
+		-- find the number of days rented
+		AND DATEDIFF(r.return_date, r.rental_date)=10;
+	
+-- List of actors in the movie with the largest cast
+	-- create table with each movie and is number of actors
+	CREATE VIEW cast_totals AS
+		SELECT fa.film_id, COUNT(fa.actor_id) AS num_actors
+		FROM film_actor fa
+        GROUP BY fa.film_id;
+	-- list names of actors in movie with greatest number of actors
+	SELECT a.first_name AS 'First', a.last_name AS 'Last'
+    FROM actor a
+    INNER JOIN film_actor f ON a.actor_id=f.actor_id
+    INNER JOIN cast_totals ct ON f.film_id=ct.film_id
+    WHERE ct.num_actors >= ALL
+		(SELECT c.num_actors
+        FROM cast_totals c)
+	ORDER BY a.last_name;
